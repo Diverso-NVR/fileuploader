@@ -13,8 +13,8 @@ import pickle
 from aiohttp import ClientSession
 from aiofile import AIOFile, Reader
 
-TOKEN_PATH = "creds/tokenDrive.pickle"
-CREDS_PATH = "creds/credentials.json"
+TOKEN_PATH = "/creds/tokenDrive.pickle"
+CREDS_PATH = "/creds/credentials.json"
 SCOPES = 'https://www.googleapis.com/auth/drive'
 API_URL = 'https://www.googleapis.com/drive/v3'
 UPLOAD_API_URL = 'https://www.googleapis.com/upload/drive/v3'
@@ -25,10 +25,12 @@ class DataForGoogle(BaseModel):
     folder_name: str
 
 
-logging.basicConfig(filename='logging/logs.log', filemode='a',
-    format='%(asctime)s - %(message)s', level=logging.INFO)
+#logging.basicConfig(filename='logging/logs.log', filemode='a',
+#    format='%(asctime)s - %(message)s', level=logging.INFO)
 
 app = FastAPI()
+
+creds = None
 
 def creds_generate():
     global creds
@@ -60,7 +62,7 @@ HEADERS = {
 }
 
 
-@app.get('/api/declare-upload')
+@app.get('/fileuploader/declare-upload')
 async def declare_upload():
     """
     Says server to create file with random name and returns this name
@@ -70,22 +72,22 @@ async def declare_upload():
     logging.info(f'Was created {file_name}')
 
     #создаём пустой файл
-    async with AIOFile(f'bin_for_temp_vids/{file_name}.mp4', 'wb') as f:
+    async with AIOFile(f'/root/vids/{file_name}.mp4', 'wb') as f:
         pass
     return JSONResponse(status_code=status.HTTP_201_CREATED, content=file_name)
 
 
-@app.put("/api/upload/{file_name}")
+@app.put("/fileuploader/upload/{file_name}")
 async def upload(file_name: str, file_in: bytes = File(...)):
     """
     Gets file_name and download bytes to file with this name
     """
-    if not os.path.isfile(f'bin_for_temp_vids/{file_name}.mp4'):
+    if not os.path.isfile(f'/bin_for_temp_vids/{file_name}.mp4'):
         logging.error(f'File with name {file_name} was not found')
         return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content='file not found')
 
     try:
-        async with AIOFile(f'bin_for_temp_vids/{file_name}.mp4', mode='ab') as file:
+        async with AIOFile(f'/bin_for_temp_vids/{file_name}.mp4', mode='ab') as file:
             await file.write(file_in)
             await file.fsync()
             logging.info(f'Writed in the {file_name}')
@@ -96,7 +98,7 @@ async def upload(file_name: str, file_in: bytes = File(...)):
         return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@app.get("/api/declare-stop/{server_file_name}")
+@app.get("/fileuploader/declare-stop/{server_file_name}")
 async def declare_stop(server_file_name: str, data_for_google: DataForGoogle):
     """
     Says code to start upload file to Google and delete it on our server

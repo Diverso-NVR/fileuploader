@@ -4,7 +4,9 @@ WORKDIR /file_uploader
 
 COPY . /file_uploader
 COPY ./requirements.txt /
-RUN mkdir bin_for_temp_vids
+
+RUN mkdir /root/vids
+
 RUN pip install --no-cache-dir -r requirements.txt
 
 EXPOSE 5005

@@ -60,7 +60,7 @@ HEADERS = {
 }
 
 
-@app.post('/declare-upload')
+@app.get('/api/declare-upload')
 async def declare_upload():
     """
     Says server to create file with random name and returns this name
@@ -75,7 +75,7 @@ async def declare_upload():
     return JSONResponse(status_code=status.HTTP_201_CREATED, content=file_name)
 
 
-@app.put("/upload/{file_name}")
+@app.put("/api/upload/{file_name}")
 async def upload(file_name: str, file_in: bytes = File(...)):
     """
     Gets file_name and download bytes to file with this name
@@ -96,7 +96,7 @@ async def upload(file_name: str, file_in: bytes = File(...)):
         return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@app.post("/declare-stop/{server_file_name}")
+@app.get("/api/declare-stop/{server_file_name}")
 async def declare_stop(server_file_name: str, data_for_google: DataForGoogle):
     """
     Says code to start upload file to Google and delete it on our server
@@ -221,7 +221,7 @@ async def get_folder_by_name(name: str) -> dict:
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=5005)
 #Is essential to wrap 'with' using try 
 #logging возможно в отдельный файл переписать
 #можно ли в логгировании просто exception писать или как-то по-другому нормально выводить ошибку, чтобы было понятно че как

@@ -13,17 +13,20 @@ import pickle
 from aiohttp import ClientSession
 from aiofile import AIOFile, Reader
 
-TOKEN_PATH = "/creds/tokenDrive.pickle"
-CREDS_PATH = "/creds/credentials.json"
+TOKEN_PATH = "creds/tokenDrive.pickle"
+CREDS_PATH = "creds/credentials.json"
 SCOPES = 'https://www.googleapis.com/auth/drive'
 API_URL = 'https://www.googleapis.com/drive/v3'
 UPLOAD_API_URL = 'https://www.googleapis.com/upload/drive/v3'
 PARENT_ID = '1weIs_vptfXVN20hSIpN9thL7Vh7VgH3h'
+# SERVER_PATH = '/root/temp_vids'
+SERVER_PATH = 'bin_for_temp_vids/'
 
 
 class DataForGoogle(BaseModel):
     file_name: str
     folder_name: str
+    #сюда можно добавить поле для того, чтобы выбрать какую папку считать родительской
 
 
 logging.basicConfig(filename='logging/logs.log', filemode='a',
@@ -73,7 +76,7 @@ async def declare_upload():
     logging.info(f'Was created {file_name}')
 
     #создаём пустой файл
-    async with AIOFile(f'/root/vids/{file_name}.mp4', 'wb') as f:
+    async with AIOFile(f'{SERVER_PATH}{file_name}.mp4', 'wb') as f:
         pass
     return JSONResponse(status_code=status.HTTP_201_CREATED, content=file_name)
 
@@ -83,12 +86,12 @@ async def upload(file_name: str, file_in: bytes = File(...)):
     """
     Gets file_name and download bytes to file with this name
     """
-    if not os.path.isfile(f'/bin_for_temp_vids/{file_name}.mp4'):
+    if not os.path.isfile(f'{SERVER_PATH}{file_name}.mp4'):
         logging.error(f'File with name {file_name} was not found')
         return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content='file not found')
 
     try:
-        async with AIOFile(f'/bin_for_temp_vids/{file_name}.mp4', mode='ab') as file:
+        async with AIOFile(f'{SERVER_PATH}{file_name}.mp4', mode='ab') as file:
             await file.write(file_in)
             await file.fsync()
             logging.info(f'Writed in the {file_name}')
@@ -99,64 +102,76 @@ async def upload(file_name: str, file_in: bytes = File(...)):
         return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-@app.get("/fileuploader/declare-stop/{server_file_name}")
+@app.post("/fileuploader/declare-stop/{server_file_name}")
 async def declare_stop(server_file_name: str, data_for_google: DataForGoogle):
     """
     Says code to start upload file to Google and delete it on our server
     """
-    await upload_to_google(data_for_google.file_name, 
+    res_upld = await upload_to_google(data_for_google.file_name, 
         data_for_google.folder_name, server_file_name)
-    try:    
-        os.remove(f'bin_for_temp_vids/{server_file_name}.mp4')
-        logging.info(f'Deleted file: {server_file_name}')
-        return JSONResponse(status_code=status.HTTP_200_OK)
-    except Exception as exp:
-        logging.info(f'Error while deleting {server_file_name} err: {exp}')
+    if res_upld:
+        try:    
+            os.remove(f'{SERVER_PATH}{server_file_name}.mp4')
+            logging.info(f'Deleted file: {server_file_name}')
+            return JSONResponse(status_code=status.HTTP_200_OK)
+        except Exception as exp:
+            logging.info(f'Error while deleting {server_file_name} err: {exp}')
+            return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    else:
+        logging.error(f'something bad happend, file {server_file_name} was not uploaded and not deleted')
         return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    #удалить файл и начать закачку его на сервер
 
     
-async def upload_to_google(file_name: str, folder_name: str, server_file_name: str) -> str:
+async def upload_to_google(google_file_name: str, folder_name: str, server_file_name: str) -> str:
+    """
+    Uploads file to google and if needed use create_folder()
+    """
     folder_id = await get_folder_by_name(folder_name)
-    folder_id = list(folder_id.keys())[0]
+
     if not folder_id:
         folder_id = await create_folder(folder_name)
+    else:
+        folder_id = list(folder_id.keys())[0]
 
-    server_file_name = f'bin_for_temp_vids/{server_file_name}.mp4'
+    full_server_path = f'{SERVER_PATH}{server_file_name}.mp4'
     
     meta_data = {
-        "name": file_name,
+        "name": google_file_name,
         "parents": [folder_id]
     }
+    try:
+        async with ClientSession() as session:
+            async with session.post(f'{UPLOAD_API_URL}/files?uploadType=resumable',
+                                    headers={**HEADERS,
+                                            **{"X-Upload-Content-Type": "video/mp4"}},
+                                    json=meta_data,
+                                    ssl=False) as resp:
+                session_url = resp.headers.get('Location')
+            
+            async with AIOFile(full_server_path, 'rb') as afp:
+                file_size = str(os.stat(full_server_path).st_size)
+                reader = Reader(afp, chunk_size=256 * 1024 * 100)  # 25MB
+                received_bytes_lower = 0
+                async for chunk in reader:
+                    chunk_size = len(chunk)
+                    chunk_range = f"bytes {received_bytes_lower}-{received_bytes_lower + chunk_size - 1}"
 
-    async with ClientSession() as session:
-        async with session.post(f'{UPLOAD_API_URL}/files?uploadType=resumable',
-                                headers={**HEADERS,
-                                         **{"X-Upload-Content-Type": "video/mp4"}},
-                                json=meta_data,
-                                ssl=False) as resp:
-            session_url = resp.headers.get('Location')
-        
-        async with AIOFile(server_file_name, 'rb') as afp:
-            file_size = str(os.stat(server_file_name).st_size)
-            reader = Reader(afp, chunk_size=256 * 1024 * 100)  # 25MB
-            received_bytes_lower = 0
-            async for chunk in reader:
-                chunk_size = len(chunk)
-                chunk_range = f"bytes {received_bytes_lower}-{received_bytes_lower + chunk_size - 1}"
+                    async with session.put(session_url, data=chunk, ssl=False,
+                                        headers={"Content-Length": str(chunk_size),
+                                                    "Content-Range": f"{chunk_range}/{file_size}"}) as resp:
+                        chunk_range = resp.headers.get('Range')
+                        if chunk_range is None:
+                            break
 
-                async with session.put(session_url, data=chunk, ssl=False,
-                                       headers={"Content-Length": str(chunk_size),
-                                                "Content-Range": f"{chunk_range}/{file_size}"}) as resp:
-                    chunk_range = resp.headers.get('Range')
-                    if chunk_range is None:
-                        break
+                        _, bytes_data = chunk_range.split('=')
+                        _, received_bytes_lower = bytes_data.split('-')
+                        received_bytes_lower = int(received_bytes_lower) + 1
 
-                    _, bytes_data = chunk_range.split('=')
-                    _, received_bytes_lower = bytes_data.split('-')
-                    received_bytes_lower = int(received_bytes_lower) + 1
-
-    logging.info(f'Uploaded {server_file_name}')
+        logging.info(f'Uploaded {full_server_path}')
+        return True
+    except Exception as exp:
+        logging.error(exp)
+        return False
 
 async def create_folder(folder_name: str, folder_parent_id: str = PARENT_ID) -> str:
     """

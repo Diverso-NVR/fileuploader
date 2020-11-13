@@ -5,7 +5,7 @@ WORKDIR /file_uploader
 COPY . /file_uploader
 COPY ./requirements.txt /
 
-RUN mkdir /root/vids
+RUN mkdir /root/temp_vids
 
 RUN pip install --no-cache-dir -r requirements.txt
 

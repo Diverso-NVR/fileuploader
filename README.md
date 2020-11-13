@@ -1,6 +1,6 @@
-#Fileuploader
+# Fileuploader
 
-##Использование этого модуля клиентом
+## Использование этого модуля клиентом
 Данный модуль включает в себя 3 рута:
 
 - https://git.miem.hse.ru/nvr/fileuploader/declare-upload
@@ -14,7 +14,7 @@
     file_name: str
     folder_name: str
 
-###Пример кода для PUT запроса
+### Пример кода для PUT запроса
 file = open('/home/sergey/Desktop/xaa', 'rb')
 a = file.read()
 file.close() 

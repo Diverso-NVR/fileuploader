@@ -20,13 +20,14 @@ API_URL = 'https://www.googleapis.com/drive/v3'
 UPLOAD_API_URL = 'https://www.googleapis.com/upload/drive/v3'
 PARENT_ID = '1weIs_vptfXVN20hSIpN9thL7Vh7VgH3h'
 
+
 class DataForGoogle(BaseModel):
     file_name: str
     folder_name: str
 
 
 logging.basicConfig(filename='logging/logs.log', filemode='a',
-    format='%(asctime)s - %(message)s', level=logging.INFO)
+   format='%(asctime)s - %(message)s', level=logging.INFO)
 
 app = FastAPI()
 

@@ -15,9 +15,13 @@
     folder_name: str
 
 ### Пример кода для PUT запроса
+
 file = open('/home/sergey/Desktop/xaa', 'rb')
+
 a = file.read()
+
 file.close() 
-files = {'file_in': ('some_name', b,
- 'video/mp4')}
+
+files = {'file_in': ('some_name', b, 'video/mp4')}
+
 r = requests.put(URL,files=files)

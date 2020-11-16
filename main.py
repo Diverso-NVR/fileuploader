@@ -1,6 +1,6 @@
 import uvicorn
 from typing import List
-from fastapi import FastAPI, Depends, UploadFile, File, status
+from fastapi import FastAPI, Depends, UploadFile, File, status, Header, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 import uuid 
@@ -12,6 +12,13 @@ from google.auth.transport.requests import Request
 import pickle
 from aiohttp import ClientSession
 from aiofile import AIOFile, Reader
+# from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+import asyncio
+import asyncpg
+import jwt
+
+
+
 
 TOKEN_PATH = "creds/tokenDrive.pickle"
 CREDS_PATH = "creds/credentials.json"
@@ -21,7 +28,9 @@ UPLOAD_API_URL = 'https://www.googleapis.com/upload/drive/v3'
 PARENT_ID = '1weIs_vptfXVN20hSIpN9thL7Vh7VgH3h'
 # SERVER_PATH = '/root/temp_vids'
 SERVER_PATH = 'bin_for_temp_vids/'
-
+DATABASE_ADRESS = os.environ.get('DB_URL')
+SECRET_KEY = '123'
+tok = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.19zZfcq5d40KCY6Poj4t7OFB_UM-eDv00bIcX5TY9fs'
 
 class DataForGoogle(BaseModel):
     file_name: str
@@ -31,6 +40,7 @@ class DataForGoogle(BaseModel):
 
 logging.basicConfig(filename='logging/logs.log', filemode='a',
    format='%(asctime)s - %(message)s', level=logging.INFO)
+
 
 app = FastAPI()
 
@@ -65,12 +75,14 @@ HEADERS = {
     "Authorization": f"Bearer {creds.token}"
 }
 
-
 @app.get('/fileuploader/declare-upload')
-async def declare_upload():
+async def declare_upload(Authentification: str = Header(...),  key: str = Header(...),):
     """
     Says server to create file with random name and returns this name
     """
+    token = get_token_auth_header(Authentification)
+    await check_jwt_token_and_key(token, key)
+
     file_name = str(uuid.uuid4().hex)
 
     logging.info(f'Was created {file_name}')
@@ -82,10 +94,14 @@ async def declare_upload():
 
 
 @app.put("/fileuploader/upload/{file_name}")
-async def upload(file_name: str, file_in: bytes = File(...)):
+async def upload(file_name: str, Authentification: str = Header(...),
+    key: str = Header(...), file_in: bytes = File(...)):
     """
     Gets file_name and download bytes to file with this name
     """
+    token = get_token_auth_header(Authentification)
+    check_jwt_token_and_key(token, key)
+
     if not os.path.isfile(f'{SERVER_PATH}{file_name}.mp4'):
         logging.error(f'File with name {file_name} was not found')
         return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content='file not found')
@@ -103,10 +119,14 @@ async def upload(file_name: str, file_in: bytes = File(...)):
 
 
 @app.post("/fileuploader/declare-stop/{server_file_name}")
-async def declare_stop(server_file_name: str, data_for_google: DataForGoogle):
+async def declare_stop(server_file_name: str, data_for_google: DataForGoogle,
+ Authentification: str = Header(...), key: str = Header(...)):
     """
     Says code to start upload file to Google and delete it on our server
     """
+    token = get_token_auth_header(Authentification)
+    check_jwt_token_and_key(token, key)
+
     res_upld = await upload_to_google(data_for_google.file_name, 
         data_for_google.folder_name, server_file_name)
     if res_upld:
@@ -232,6 +252,76 @@ async def get_folder_by_name(name: str) -> dict:
 
     return {folder['id']: folder.get('parents', []) for folder in folders}
 
+def get_token_auth_header(authorization):
+    parts = authorization.split()
+
+    if parts[0].lower() != "bearer":
+        raise HTTPException(
+            status_code=401, 
+            detail='Authorization header must start with Bearer')
+    elif len(parts) == 1:
+        raise HTTPException(
+            status_code=401, 
+            detail='Authorization token not found')
+    elif len(parts) > 2:
+        raise HTTPException(
+            status_code=401, 
+            detail='Authorization header be Bearer token')
+    token = parts[1]
+    return token
+
+async def check_jwt_token_and_key(token: str, key: str):
+    #как получить secret key?
+    if token:
+        try:
+            data = jwt.decode(token, SECRET_KEY)
+            conn = await asyncpg.connect(DATABASE_ADRESS)
+            user = await conn.fetchrow(
+                'SELECT * FROM users WHERE email = $1', data['sub']['email']
+            )
+            await conn.close()
+
+            if not user:
+                raise HTTPException(
+                    status_code=401, 
+                    detail='User with this token not found')
+            return True
+
+        except jwt.ExpiredSignatureError:
+            logging.error('ExpiredSignatureError')
+            raise HTTPException(
+                    status_code=401, 
+                    detail='TokenExpired')
+        except jwt.InvalidTokenError:
+            logging.error('Invalid token')
+            raise HTTPException(
+                    status_code=401, 
+                    detail='Invalid token')
+        except Exception as e:
+            logging.error(e)
+            raise HTTPException(
+                    status_code=401, 
+                    detail=e)
+    elif key:
+        try:
+            conn = await asyncpg.connect(DATABASE_ADRESS)
+            user = await conn.fetchrow(
+                'SELECT * FROM users WHERE api_key = $1', key
+            )
+            await conn.close()
+            if not user:
+                raise HTTPException(
+                    status_code=401, 
+                    detail='wrong api key')
+            return True
+        except expression as exp:
+            logging.error(exp)
+            raise HTTPException(
+                    status_code=500, 
+                    detail='Server error')
+    raise HTTPException(
+                    status_code=401, 
+                    detail='Invalid token and key')
 
 
 
@@ -244,3 +334,8 @@ if __name__ == "__main__":
 #logging возможно в отдельный файл переписать
 #можно ли в логгировании просто exception писать или как-то по-другому нормально выводить ошибку, чтобы было понятно че как
 #асинхронное удаление хз как сделать
+
+#для прода
+# os.environ['DB_URL'] -- задать
+# добавить слеши  в именах в папках
+# заменить получение секретного ключа

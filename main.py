@@ -269,7 +269,7 @@ def get_token_auth_header(authorization):
             detail='Authorization header be Bearer token')
     token = parts[1]
     return token
-
+POST
 async def check_jwt_token_and_key(token: str, key: str):
     #как получить secret key?
     if token:

@@ -314,7 +314,7 @@ async def check_jwt_token_and_key(token: str, key: str):
                     status_code=401, 
                     detail='wrong api key')
             return True
-        except expression as exp:
+        except Exception as exp:
             logging.error(exp)
             raise HTTPException(
                     status_code=500, 

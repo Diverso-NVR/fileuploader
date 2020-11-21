@@ -56,8 +56,6 @@ if __name__ == "__main__":
         stream=sys.stdout, level=logging.INFO, format="%(asctime)s - %(message)s"
     )
 
-    creds_generate()
-
     uvicorn.run(app, host="0.0.0.0", port=5005)
 
     # logging.basicConfig(

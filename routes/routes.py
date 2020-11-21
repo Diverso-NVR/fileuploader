@@ -1,11 +1,9 @@
 import os.path
 import logging
 import uuid
-import pickle
 from fastapi import APIRouter, File, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
-from aiofile import AIOFile
+from pydantic import BaseModel
 from google_functions import upload_to_google, declare_upload_to_google
 from main import r
 

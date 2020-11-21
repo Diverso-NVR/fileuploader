@@ -1,11 +1,11 @@
 import os
 import logging
-from sys import getdefaultencoding
+
+# from sys import getdefaultencoding
 from aiohttp import ClientSession
 from aiofile import AIOFile, Reader
 from main import r, creds
 from google.auth.transport.requests import Request
-import json
 
 
 API_URL = "https://www.googleapis.com/drive/v3"
@@ -78,7 +78,7 @@ async def upload_to_google(file_id: str, file_in: bytes) -> str:
     """
     dict = r.hgetall(file_id)
 
-    file_size = dict[b"file_size"]
+    file_size = dict[b"file_size"].decode("utf-8")
     session_url = dict[b"session_url"].decode("utf-8")
 
     if r.hget(file_id, "received_bytes_lower") == b"None":

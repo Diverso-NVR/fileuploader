@@ -1,76 +1,60 @@
 import os
-import pickle
 import logging
+from sys import getdefaultencoding
 from aiohttp import ClientSession
 from aiofile import AIOFile, Reader
-from google_auth_oauthlib.flow import InstalledAppFlow
+from main import r, creds
 from google.auth.transport.requests import Request
+import json
 
 
 API_URL = "https://www.googleapis.com/drive/v3"
+
 
 TOKEN_PATH = "creds/tokenDrive.pickle"
 CREDS_PATH = "creds/credentials.json"
 SCOPES = "https://www.googleapis.com/auth/drive"
 UPLOAD_API_URL = "https://www.googleapis.com/upload/drive/v3"
+
 PARENT_ID = "1weIs_vptfXVN20hSIpN9thL7Vh7VgH3h"
-# SERVER_PATH = '/root/temp_vids'
+
+SERVER_PATH = os.environ.get("SERVER_PATH")
+
+HEADERS = None
+
 
 def possible_update_creds(function_to_decorate):
-    # Внутри себя декоратор определяет функцию-"обёртку". Она будет обёрнута вокруг декорируемой,
-    # получая возможность исполнять произвольный код до и после неё.
-    def wrapper():
+    async def wrapper(*args, **kwards):
         if creds.expired:
             creds.refresh(Request())
-            HEADERS = {"Content-Type": "application/json", "Authorization": f"Bearer {creds.token}"}
-        function_to_decorate()
+        global HEADERS
+        HEADERS = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {creds.token}",
+        }
+        return await function_to_decorate(*args, **kwards)
+
     return wrapper
-
-creds = None
-
-def creds_generate():
-    global creds
-    # if you do not have creds
-    # flow = InstalledAppFlow.from_client_secrets_file(
-    #             CREDS_PATH, SCOPES)
-    # creds = flow.run_local_server(port=0)
-    # with open(TOKEN_PATH, 'wb') as token:
-    #     pickle.dump(creds, token)
-    if os.path.exists(TOKEN_PATH):
-        with open(TOKEN_PATH, "rb") as token:
-            creds = pickle.load(token)
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(CREDS_PATH, SCOPES)
-            creds = flow.run_local_server(port=0)
-        with open(TOKEN_PATH, "wb") as token:
-            pickle.dump(creds, token)
-
-
-
 
 
 @possible_update_creds
-async def upload_to_google(
-    google_file_name: str,
-    folder_name: str, 
-    server_file_name: str
-) -> str:
-    """
-    Uploads file to google and if needed use create_folder()
-    """
+async def declare_upload_to_google(file_id: str):
+    dict = r.hgetall(file_id)
+
+    folder_name = dict[b"folder_name"].decode("utf-8")
+    parent_folder_id = dict[b"parent_folder_id"].decode("utf-8")
+    file_name = dict[b"file_name"].decode("utf-8")
+
     folder_id = await get_folder_by_name(folder_name)
 
     if not folder_id:
-        folder_id = await create_folder(folder_name)
+        folder_id = await create_folder(folder_name, parent_folder_id)
+        pass
     else:
         folder_id = list(folder_id.keys())[0]
+        r.hset(file_id, "folder_id", folder_id)
 
-    full_server_path = f"{SERVER_PATH}{server_file_name}.mp4"
-
-    meta_data = {"name": google_file_name, "parents": [folder_id]}
+    meta_data = {"name": file_name, "parents": [folder_id]}
     try:
         async with ClientSession() as session:
             async with session.post(
@@ -80,37 +64,62 @@ async def upload_to_google(
                 ssl=False,
             ) as resp:
                 session_url = resp.headers.get("Location")
-
-            async with AIOFile(full_server_path, "rb") as afp:
-                file_size = str(os.stat(full_server_path).st_size)
-                reader = Reader(afp, chunk_size=256 * 1024 * 100)  # 25MB
-                received_bytes_lower = 0
-                async for chunk in reader:
-                    chunk_size = len(chunk)
-                    chunk_range = f"bytes {received_bytes_lower}-{received_bytes_lower + chunk_size - 1}"
-
-                    async with session.put(
-                        session_url,
-                        data=chunk,
-                        ssl=False,
-                        headers={
-                            "Content-Length": str(chunk_size),
-                            "Content-Range": f"{chunk_range}/{file_size}",
-                        },
-                    ) as resp:
-                        chunk_range = resp.headers.get("Range")
-                        if chunk_range is None:
-                            break
-
-                        _, bytes_data = chunk_range.split("=")
-                        _, received_bytes_lower = bytes_data.split("-")
-                        received_bytes_lower = int(received_bytes_lower) + 1
-
-        logging.info(f"Uploaded {full_server_path}")
+                r.hset(file_id, "session_url", session_url)
         return True
     except Exception as exp:
         logging.error(exp)
         return False
+
+
+@possible_update_creds
+async def upload_to_google(file_id: str, file_in: bytes) -> str:
+    """
+    Uploads file to google and if needed use create_folder()
+    """
+    dict = r.hgetall(file_id)
+
+    file_size = dict[b"file_size"]
+    session_url = dict[b"session_url"].decode("utf-8")
+
+    if r.hget(file_id, "received_bytes_lower") == b"None":
+        r.hset(file_id, "received_bytes_lower", 0)
+        received_bytes_lower = b"0"
+    else:
+        received_bytes_lower = r.hget(file_id, "received_bytes_lower")
+
+    received_bytes_lower = int(received_bytes_lower.decode("utf-8"))
+
+    chunk_size = len(file_in)
+    chunk_range = (
+        f"bytes {received_bytes_lower}-{received_bytes_lower + chunk_size - 1}"
+    )
+    try:
+        async with ClientSession() as session:
+            async with session.put(
+                session_url,
+                data=file_in,
+                ssl=False,
+                headers={
+                    "Content-Length": str(chunk_size),
+                    "Content-Range": f"{chunk_range}/{file_size}",
+                },
+            ) as resp:
+                print(await resp.text())
+                chunk_range = resp.headers.get("Range")
+                if chunk_range is None:
+                    r.delete(file_id)
+                    return True
+
+                _, bytes_data = chunk_range.split("=")
+                _, received_bytes_lower = bytes_data.split("-")
+                received_bytes_lower = int(received_bytes_lower) + 1
+                r.hset(file_id, "received_bytes_lower", received_bytes_lower)
+                logging.info(f"Uploaded {file_id}")
+                return True
+    except Exception as exp:
+        logging.error(exp)
+        return False
+
 
 @possible_update_creds
 async def create_folder(folder_name: str, folder_parent_id: str = PARENT_ID) -> str:
@@ -145,6 +154,7 @@ async def create_folder(folder_name: str, folder_parent_id: str = PARENT_ID) -> 
 
     return folder_id
 
+
 @possible_update_creds
 async def get_folder_by_name(name: str) -> dict:
     logging.info(f"Getting the id of folder with name {name}")
@@ -158,7 +168,7 @@ async def get_folder_by_name(name: str) -> dict:
     page_token = ""
 
     async with ClientSession() as session:
-        while page_token != False:
+        while page_token is not False:
             async with session.get(
                 f"{API_URL}/files?pageToken={page_token}",
                 headers=HEADERS,
@@ -170,5 +180,3 @@ async def get_folder_by_name(name: str) -> dict:
                 page_token = resp_json.get("nextPageToken", False)
 
     return {folder["id"]: folder.get("parents", []) for folder in folders}
-
-

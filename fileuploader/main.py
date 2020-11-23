@@ -43,7 +43,7 @@ def custom_openapi():
         routes=app.routes,
     )
     openapi_schema["info"]["x-logo"] = {
-        "url": "https://avatars2.githubusercontent.com/u/64712541?s=200&v=4"
+        "url": "https://avatars2.githubusercontent.com/u/64712541"
     }
 
     app.openapi_schema = openapi_schema

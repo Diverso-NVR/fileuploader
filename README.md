@@ -20,14 +20,14 @@ from aiohttp import ClientSession
 from aiofile import AIOFile, Reader
 
 
-api_key: str
+api_key: str # nvr API key
 file_path: str
 file_name: str
-folder_name: str
+folder_name: str # course code
 file_size: int
-parent_id: str
+parent_id: str # "1weIs_vptfXVN20hSIpN9thL7Vh7VgH3h" for Zoom
 
-api_url: str
+api_url: str = 'https://nvr.miem.hse.ru/api/fileuploader'
 
 headers = {"key": api_key}
 
@@ -45,16 +45,15 @@ async def go():
         async with session.post(
             f"{api_url}/files/", json=data, ssl=False, headers=headers
         ) as resp:
-            resp__json = await resp.text()
+            resp__json = await resp.json()
             file_id = resp__json["file_id"]
-            print(file_id)
 
         async with AIOFile(file_path, "rb") as afp:
             reader = Reader(afp, chunk_size=256 * 1024 * 100)  # загрузка по 25MB
             async for chunk in reader:
                 async with session.put(
                     f"{api_url}/files/{file_id}",
-                    data=chunk,
+                    data={"file_data": chunk},
                     ssl=False,
                     headers=headers,
                 ) as resp:

@@ -20,14 +20,15 @@ def create_app():
 
     app.add_middleware(BaseHTTPMiddleware, dispatch=authorization)
 
-    @app.on_event("shutdown")
-    async def shutdown_event():
-        await close_redis()
-
     return app
 
 
 app = create_app()
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await close_redis()
 
 
 if __name__ == "__main__":

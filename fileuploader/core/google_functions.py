@@ -57,17 +57,17 @@ def token_check(func):
 async def declare_upload_to_google(file_id: str):
     file = await redis.get(file_id, encoding="utf-8")
     file = ujson.loads(file)
-    print(file)
 
     folder_name = file["folder_name"]
     parent_folder_id = file["parent_folder_id"]
     file_name = file["file_name"]
 
     folders = await get_folder_by_name(folder_name)
-    if not folders:
-        folder_id = await create_folder(folder_name, parent_folder_id)
+    for folder_id, folder_parent_ids in folders.items():
+        if parent_folder_id in folder_parent_ids:
+            break
     else:
-        folder_id = list(folders.keys())[0]
+        folder_id = await create_folder(folder_name, parent_folder_id)
 
     file["folder_id"] = folder_id
 
@@ -88,27 +88,27 @@ async def declare_upload_to_google(file_id: str):
 
 
 @token_check
-async def upload_to_google(file_id: str, file_in: bytes) -> str:
+async def upload_to_google(file_id: str, file_data: bytes) -> str:
     """
     Uploads file to google and if needed use create_folder()
     """
     file = await redis.get(file_id, encoding="utf-8")
-    try:
-        file = ujson.loads(file)
-    except Exception as ex:
-        print(ex)
+    file = ujson.loads(file)
+
     file_size = file["file_size"]
     session_url = file["session_url"]
     received_bytes_lower = file["received_bytes_lower"]
 
-    chunk_size = len(file_in)
+    chunk_size = len(file_data)
     chunk_range = (
         f"bytes {received_bytes_lower}-{received_bytes_lower + chunk_size - 1}"
     )
+    logger.info(f"Uploading {chunk_range} for {file_id}")
+
     async with ClientSession() as session:
         async with session.put(
             session_url,
-            data=file_in,
+            data=file_data,
             ssl=False,
             headers={
                 "Content-Length": str(chunk_size),
@@ -129,8 +129,6 @@ async def upload_to_google(file_id: str, file_in: bytes) -> str:
         file_id,
         ujson.dumps(file),
     )
-
-    logger.info(f"Uploaded {chunk_range} for {file_id}")
 
 
 @token_check

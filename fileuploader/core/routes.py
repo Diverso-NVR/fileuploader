@@ -25,56 +25,40 @@ class DataForGoogle(BaseModel):
 router = APIRouter()
 
 
-@router.post("/files/")
+@router.post("/files/", status_code=201)
 async def declare_upload(data_for_google: DataForGoogle):
     """
     Says server to create file with random name and returns this name
     """
 
     file_id = str(uuid.uuid4().hex)
-    await redis.set(1, 2)
-    print("redis")
-    print(file_id)
-    try:
-        res = await redis.set(
-            file_id,
-            ujson.dumps(
-                {
-                    "file_name": data_for_google.file_name,
-                    "folder_name": data_for_google.folder_name,
-                    "parent_folder_id": data_for_google.parent_folder_id,
-                    "file_size": data_for_google.file_size,
-                    "received_bytes_lower": 0,
-                    "session_url": None,
-                }
-            ),
-        )
-        print(res)
-    except Exception as err:
-        print(err)
+    await redis.set(
+        file_id,
+        ujson.dumps(
+            {
+                "file_name": data_for_google.file_name,
+                "folder_name": data_for_google.folder_name,
+                "parent_folder_id": data_for_google.parent_folder_id,
+                "file_size": data_for_google.file_size,
+                "received_bytes_lower": 0,
+                "session_url": None,
+            }
+        ),
+    )
 
-    try:
-        await declare_upload_to_google(file_id)
-        logger.info(f"Was created {file_id}")
-        return JSONResponse(status_code=201, content={"file_id": file_id})
-    except Exception as exp:
-        print(exp)
-        return Response(status_code=500)
+    await declare_upload_to_google(file_id)
+    logger.info(f"Was created {file_id}")
+
+    return {"file_id": file_id}
 
 
 @router.put("/files/{file_id}")
 async def upload(
     file_id: str,
-    file_in: bytes = File(...),
+    file_data: bytes = File(...),
 ):
     """
     Gets file_name and download bytes to file with this name
     """
-    try:
-        file_id = file_id.split(":")
-        file_id = file_id[1].replace("}", "")
-        await upload_to_google(file_id, file_in)
-        return JSONResponse(status_code=201, content={"message": "File uploaded"})
-    except Exception as exp:
-        print(exp)
-        return Response(status_code=500)
+    await upload_to_google(file_id, file_data)
+    return {"message": f"Uploaded {len(file_data)} for {file_id}"}

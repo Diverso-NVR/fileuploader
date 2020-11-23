@@ -4,10 +4,12 @@
 
 Данный модуль включает в себя 2 рута:
 
+Доки UI: https://nvr.miem.hse.ru/api/fileuploader/docs
+
 - https://nvr.miem.hse.ru/api/fileuploader/files/
   вы отправляете на данный адрес POST запорс с полями как в примере, вам возвращается id. По этому id загружаете дальше файлы вставляя его в url. Если ответ сервера 201, то всё хорошо
 
-- https://nvr.miem.hse.ru/api/fileuploader/files/{file_name}
+- https://nvr.miem.hse.ru/api/fileuploader/files/{file_id}
   вы отправляете на данный адрес PUT запросы с байтами или с файлами видео, согласно приведенному коду в конце README. Вместо file_id вы вставляете id, полученный по запросу в declare-upload. Возвращается код 200, если всё хорошо
 
 ### Пример кода для загрузки на сервер

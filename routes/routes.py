@@ -67,10 +67,10 @@ async def upload(
 
     res_upld = await upload_to_google(file_id, file_in)
     if res_upld:
-        return JSONResponse(status_code=status.HTTP_201_CREATED, content="Загружено")
+        return JSONResponse(status_code=status.HTTP_200_OK, content="Загружено")
     else:
         return JSONResponse(
-            status_code=status.HTTP_201_CREATED, content="Ошибка на сервере"
+            status_code=status.HTTP_400_BAD_REQUEST, content="Ошибка на сервере"
         )
 
 

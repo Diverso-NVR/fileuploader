@@ -56,6 +56,7 @@ def token_check(func):
 @token_check
 async def declare_upload_to_google(file_id: str):
     file = await redis.get(file_id, encoding="utf-8")
+    logger.info(f"declare_upload_to_google got {file} for {file_id} from redis")
     file = ujson.loads(file)
 
     folder_name = file["folder_name"]
@@ -86,6 +87,8 @@ async def declare_upload_to_google(file_id: str):
         ujson.dumps(file),
     )
 
+    logger.info(f"Declared upload {file_id} to google with data: {file}")
+
 
 @token_check
 async def upload_to_google(file_id: str, file_data: bytes) -> str:
@@ -93,6 +96,7 @@ async def upload_to_google(file_id: str, file_data: bytes) -> str:
     Uploads file to google and if needed use create_folder()
     """
     file = await redis.get(file_id, encoding="utf-8")
+    logger.info(f"upload_to_google got {file} for {file_id} from redis")
     file = ujson.loads(file)
 
     file_size = file["file_size"]
@@ -118,6 +122,7 @@ async def upload_to_google(file_id: str, file_data: bytes) -> str:
             chunk_range = resp.headers.get("Range")
             if chunk_range is None:
                 await redis.delete(file_id)
+                logger.info(f"Uploaded {file_id} to google")
                 return
 
             _, bytes_data = chunk_range.split("=")
@@ -129,6 +134,7 @@ async def upload_to_google(file_id: str, file_data: bytes) -> str:
         file_id,
         ujson.dumps(file),
     )
+    logger.info(f"Continuing uploading {file_id} to google with data: {file}")
 
 
 @token_check

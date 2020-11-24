@@ -45,6 +45,7 @@ creds_generate()
 def token_check(func):
     async def wrapper(*args, **kwargs):
         if creds.expired:
+            logger.info("Recreating google token")
             creds_generate()
 
         headers["Authorization"] = f"Bearer {creds.token}"
@@ -155,6 +156,7 @@ async def create_folder(folder_name: str, folder_parent_id: str) -> str:
             f"{API_URL}/files", headers=headers, json=meta_data, ssl=False
         ) as resp:
             resp_json = await resp.json()
+            logger.info(f"create_folder response: {resp_json}")
             folder_id = resp_json["id"]
 
         new_perm = {"type": "anyone", "role": "reader"}
@@ -191,6 +193,7 @@ async def get_folder_by_name(name: str) -> dict:
                 ssl=False,
             ) as resp:
                 resp_json = await resp.json()
+                logger.info(f"get_folder_by_name response: {resp_json}")
                 folders.extend(resp_json.get("files", []))
                 page_token = resp_json.get("nextPageToken", False)
 

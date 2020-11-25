@@ -75,5 +75,6 @@ async def upload(
     """
     Gets file_name and download bytes to drive with its name
     """
+    logger.info(f"Recieved {len(file_data)} bytes")
     await upload_to_google(file_id, file_data)
     return {"message": f"Uploaded {len(file_data)} for {file_id}"}

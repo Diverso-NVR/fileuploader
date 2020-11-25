@@ -9,7 +9,7 @@ from .settings import settings
 
 async def create_pool():
     global redis
-    redis = await aioredis.create_redis_pool("redis://localhost:6379")
+    redis = await aioredis.create_redis_pool(settings.redis_url)
 
 
 asyncio.run(create_pool())
@@ -27,3 +27,17 @@ async def db_connect():
         yield conn
     finally:
         await conn.close()
+
+
+async def get_user(api_key: str) -> asyncpg.Record:
+    async with db_connect() as conn:
+        return await conn.fetchrow(
+            "SELECT id, email FROM users WHERE api_key = $1", api_key
+        )
+
+
+async def get_online_room(name: str) -> asyncpg.Record:
+    async with db_connect() as conn:
+        return await conn.fetchrow(
+            "SELECT id, name, drive FROM online_rooms WHERE name = $1", name
+        )

@@ -1,6 +1,7 @@
 import os
 import logging
 import pickle
+from datetime import datetime
 
 from aiohttp import ClientSession
 from google.auth.transport.requests import Request
@@ -61,19 +62,22 @@ async def declare_upload_to_google(file_id: str):
     file = ujson.loads(file)
 
     folder_name = file["folder_name"]
-    parent_folder_id = file["parent_folder_id"]
+    root_folder_id = file["root_folder_id"]
     file_name = file["file_name"]
+
+    record_dt = file["record_dt"]
+    record_dt = datetime.strptime(record_dt, "%Y-%m-%dT%H:%M:%S")
 
     folders = await get_folder_by_name(folder_name)
     for folder_id, folder_parent_ids in folders.items():
-        if parent_folder_id in folder_parent_ids:
+        if root_folder_id in folder_parent_ids:
+            new_folder_id = await create_folder(str(record_dt.date()), folder_id)
             break
     else:
-        folder_id = await create_folder(folder_name, parent_folder_id)
+        parent_id = await create_folder(folder_name, root_folder_id)
+        new_folder_id = await create_folder(str(record_dt.date()), parent_id)
 
-    file["folder_id"] = folder_id
-
-    meta_data = {"name": file_name, "parents": [folder_id]}
+    meta_data = {"name": file_name, "parents": [new_folder_id]}
     async with ClientSession() as session:
         async with session.post(
             f"{UPLOAD_API_URL}/files?uploadType=resumable",

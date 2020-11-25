@@ -1,45 +1,60 @@
 import logging
 import uuid
 
-from fastapi import APIRouter, File, Response
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, File
 from pydantic import BaseModel
+from pydantic.fields import Field
 import ujson
 
 from .google_functions import upload_to_google, declare_upload_to_google
-from .settings import settings
-from .connections import redis
+from .connections import redis, get_online_room
 
 logger = logging.getLogger("fileuploader")
 
-VIDS_PATH = settings.vids_path
 
-
-class DataForGoogle(BaseModel):
-    file_name: str
-    folder_name: str
-    parent_folder_id: str
-    file_size: str
+class OnlineRecord(BaseModel):
+    file_name: str = Field(
+        ...,
+        example="Физика БИВ171",
+        description="File name under which file will be saved on drive",
+    )
+    folder_name: str = Field(
+        ...,
+        example="БИВ171",
+        description="Folder name in parent folder, where records will be stored by date",
+    )
+    room_name: str = Field(
+        ..., example="Zoom", description="'Zoom' or 'MS Teams' for now"
+    )
+    file_size: int = Field(..., gt=0, example=1024, description="File size in bytes")
+    record_dt: str = Field(
+        ...,
+        example="2020-08-21T01:30:00",
+        description="Moscow time. Will be parsed to create date folder for records in 'folder_name' folder",
+    )
 
 
 router = APIRouter()
 
 
-@router.post("/files/", status_code=201)
-async def declare_upload(data_for_google: DataForGoogle):
+@router.post("/files", status_code=201)
+async def declare_upload(record: OnlineRecord):
     """
-    Says server to create file with random name and returns this name
+    Says server to create file with random id and returns this id
     """
 
     file_id = str(uuid.uuid4().hex)
+    room = await get_online_room(record.room_name)
+
     await redis.set(
         file_id,
         ujson.dumps(
             {
-                "file_name": data_for_google.file_name,
-                "folder_name": data_for_google.folder_name,
-                "parent_folder_id": data_for_google.parent_folder_id,
-                "file_size": data_for_google.file_size,
+                "file_name": record.file_name,
+                "folder_name": record.folder_name,
+                "file_size": record.file_size,
+                "record_dt": record.record_dt,
+                "root_folder_id": room.get("drive"),
                 "received_bytes_lower": 0,
                 "session_url": None,
             }
@@ -58,7 +73,7 @@ async def upload(
     file_data: bytes = File(...),
 ):
     """
-    Gets file_name and download bytes to file with this name
+    Gets file_name and download bytes to drive with its name
     """
     await upload_to_google(file_id, file_data)
     return {"message": f"Uploaded {len(file_data)} for {file_id}"}

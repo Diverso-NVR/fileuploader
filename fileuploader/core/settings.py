@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     google_token_path: str = Field(..., env="GOOGLE_TOKEN_PATH")
 
     db_url: str = Field(..., env="DB_URL")
-    vids_path: str = Field(..., env="VIDS_PATH")
+    redis_url: str = Field(..., env="REDIS_URL")
 
     class Config:
         env_file = ".env"

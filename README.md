@@ -14,6 +14,8 @@
 
 ### Пример кода для загрузки на сервер
 
+#### async
+
 ```python
 import asyncio
 import os
@@ -27,7 +29,7 @@ file_path: str
 file_name: str
 folder_name: str # course code
 file_size: int
-parent_id: str # "1weIs_vptfXVN20hSIpN9thL7Vh7VgH3h" for Zoom
+parent_id: str # "1d4zE9oKBwd2XjHOuJ3lu5j1z758oJyqv" for Zoom
 
 api_url: str = 'https://nvr.miem.hse.ru/api/fileuploader'
 
@@ -63,4 +65,50 @@ async def go():
 
 
 asyncio.run(go())
+```
+#### sync
+```python
+import requests
+
+api_key: str # nvr API key
+file_path: str
+file_name: str
+folder_name: str # course code
+file_size: int
+parent_id: str # "1d4zE9oKBwd2XjHOuJ3lu5j1z758oJyqv" for Zoom
+
+api_url: str = 'https://nvr.miem.hse.ru/api/fileuploader'
+
+headers = {"key": api_key}
+
+
+def main():
+    file_size = str(os.stat(file_path).st_size)
+    data = {
+        "file_name": file_name,  # имя на диске гугла
+        "folder_name": folder_name,  # имя папки для загрузки. Папка находится в parent_id директории
+        "parent_folder_id": parent_id,  # сам parent_id
+        "file_size": file_size,  # размер файла
+    }
+
+    res = requests.post(
+        f"{api_url}/files/", headers=headers, json=data
+    )
+    file_id = res.json()["file_id"]
+
+    with open(file_path, "rb") as f:
+        chunk = f.read(256 * 1024 * 25) # 5 MB
+
+        while len(chunk) > 0:
+            resp = requests.put(
+                f"{api_url}/files/{file_id}",
+                headers=headers,
+                files={"file_data": chunk},
+            )
+            print(resp.json())
+            chunk = f.read(256 * 1024 * 25)
+
+
+if __name__ == "__main__":
+    main()
 ```

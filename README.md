@@ -31,8 +31,8 @@ headers = {"key": api_key}
 
 file_size = os.stat(file_path).st_size
 data = {
-    "file_name": file_path,  # имя на диске гугла
-    "folder_name": file_name,
+    "file_name": file_name,  # имя на диске гугла
+    "folder_name": folder_name,
     "room_name": room_name,
     "file_size": file_size,  # размер файла
     "record_dt": dt,

@@ -7,7 +7,7 @@ from pydantic.fields import Field
 import ujson
 
 from .google_functions import upload_to_google, declare_upload_to_google
-from .connections import redis, get_online_room
+from .connections import redis, get_room
 
 logger = logging.getLogger("fileuploader")
 
@@ -44,7 +44,7 @@ async def declare_upload(record: OnlineRecord):
     """
 
     file_id = str(uuid.uuid4().hex)
-    room = await get_online_room(record.room_name)
+    room = await get_room(record.room_name)
 
     await redis.set(
         file_id,
@@ -54,7 +54,7 @@ async def declare_upload(record: OnlineRecord):
                 "folder_name": record.folder_name,
                 "file_size": record.file_size,
                 "record_dt": record.record_dt,
-                "root_folder_id": room.get("drive"),
+                "root_folder_id": room.get("drive").split("/")[0],
                 "received_bytes_lower": 0,
                 "session_url": None,
             }

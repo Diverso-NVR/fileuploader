@@ -36,8 +36,14 @@ async def get_user(api_key: str) -> asyncpg.Record:
         )
 
 
-async def get_online_room(name: str) -> asyncpg.Record:
+async def get_room(name: str) -> asyncpg.Record:
     async with db_connect() as conn:
-        return await conn.fetchrow(
+        room = await conn.fetchrow(
             "SELECT id, name, drive FROM online_rooms WHERE name = $1", name
         )
+        if not room:
+            room = await conn.fetchrow(
+                "SELECT id, name, drive FROM rooms WHERE name = $1", name
+            )
+
+    return room

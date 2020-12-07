@@ -1,9 +1,8 @@
 from datetime import datetime
 import pickle
 import os
-import asyncio
 import logging
-from typing import List, Union, AsyncGenerator, Dict
+from typing import List, Union, AsyncGenerator, Tuple
 
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
@@ -35,7 +34,10 @@ class GoogleBase:
         self._scopes = scopes
         self._creds = None
 
-        self._httpsession = ClientSession(json_serialize=ujson.dumps)
+        try:
+            self._httpsession = ClientSession(json_serialize=ujson.dumps)
+        except RuntimeError:
+            self._httpsession = None
 
         self._headers = {"Authorization": ""}
 
@@ -126,7 +128,7 @@ class GDrive(GoogleBase):
         record_dt = file["record_dt"]
         record_dt = datetime.strptime(record_dt, "%Y-%m-%dT%H:%M:%S")
 
-        date_folder_id = self.find_folder(str(record_dt.date()), root_folder_id)
+        date_folder_id = await self.find_folder(str(record_dt.date()), root_folder_id)
 
         meta_data = {"name": file_name, "parents": [date_folder_id]}
         async with self._httpsession.post(
@@ -142,9 +144,7 @@ class GDrive(GoogleBase):
         logger.info(f"Declared upload {file_id} to google with data: {file}")
 
     async def find_folder(self, date: str, root_folder_id: str) -> str:
-        folders = [folder async for folder in self.get_folders_by_name(date)]
-
-        for folder_id, folder_parent_ids in folders.items():
+        async for folder_id, folder_parent_ids in self.get_folders_by_name(date):
             if root_folder_id in folder_parent_ids:
                 break
         else:
@@ -180,10 +180,20 @@ class GDrive(GoogleBase):
             },
         ) as resp:
             chunk_range = resp.headers.get("Range")
+
+            try:
+                resp_json = await resp.json()
+                file["drive_file_id"] = resp_json["id"]
+            except Exception:
+                pass
+
             if chunk_range is None:
+                resp_json = await resp.json()
+
                 await redis.remove_data(file_id)
                 logger.info(f"Uploaded {file_id} to google")
-                return
+
+                return resp_json["id"]
 
             _, bytes_data = chunk_range.split("=")
             _, received_bytes_lower = bytes_data.split("-")
@@ -233,7 +243,7 @@ class GDrive(GoogleBase):
     async def get_folders_by_name(
         self,
         name: str,
-    ) -> AsyncGenerator[Dict[str, List[str]], None]:
+    ) -> AsyncGenerator[Tuple[str, List[str]], None]:
         logger.info(f"Getting the id of folder with name {name}")
 
         params = dict(
@@ -257,7 +267,7 @@ class GDrive(GoogleBase):
 
                 folders = resp_json.get("files", [])
                 for folder in folders:
-                    yield {folder["id"]: folder.get("parents", [])}
+                    yield folder["id"], folder.get("parents", [])
 
 
 calendar_service = GCalendar(

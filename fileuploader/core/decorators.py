@@ -2,6 +2,9 @@ from functools import wraps
 import logging
 from time import time
 
+from aiohttp import ClientSession
+import ujson
+
 COROUTINE = "coro"
 GENERATOR = "gen"
 
@@ -16,6 +19,9 @@ def token_check(type: str = COROUTINE):
                 logger.info("Refresh google tokens")
                 self.refresh_token()
 
+            if self._httpsession is None:
+                self._httpsession = ClientSession(json_serialize=ujson.dumps)
+
             return await func(self, *args, **kwargs)
 
         @wraps(func)
@@ -23,6 +29,9 @@ def token_check(type: str = COROUTINE):
             if not self._creds or self._creds.expired:
                 logger.info("Refresh google tokens")
                 self.refresh_token()
+
+            if self._httpsession is None:
+                self._httpsession = ClientSession(json_serialize=ujson.dumps)
 
             return func(self, *args, **kwargs)
 

@@ -12,9 +12,7 @@ async def create_pool():
     redis = await aioredis.create_redis_pool(settings.redis_url)
 
 
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
-loop.run_until_complete(create_pool())
+asyncio.run(create_pool())
 
 
 async def close_redis():

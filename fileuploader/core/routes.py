@@ -4,10 +4,9 @@ import uuid
 from fastapi import APIRouter, File
 from pydantic import BaseModel
 from pydantic.fields import Field
-import ujson
 
-from .google_functions import upload_to_google, declare_upload_to_google
-from .connections import redis, get_room
+from .google import drive_service
+from .db import redis, psql
 
 logger = logging.getLogger("fileuploader")
 
@@ -44,24 +43,22 @@ async def declare_upload(record: OnlineRecord):
     """
 
     file_id = str(uuid.uuid4().hex)
-    room = await get_room(record.room_name)
+    room = await psql.get_room(record.room_name)
 
-    await redis.set(
+    await redis.dump_data(
         file_id,
-        ujson.dumps(
-            {
-                "file_name": record.file_name,
-                "folder_name": record.folder_name,
-                "file_size": record.file_size,
-                "record_dt": record.record_dt,
-                "root_folder_id": room.get("drive").split("/")[0],
-                "received_bytes_lower": 0,
-                "session_url": None,
-            }
-        ),
+        {
+            "file_name": record.file_name,
+            "folder_name": record.folder_name,
+            "file_size": record.file_size,
+            "record_dt": record.record_dt,
+            "room_drive_id": room.get("drive").split("/")[0],
+            "received_bytes_lower": 0,
+            "session_url": None,
+        },
     )
 
-    await declare_upload_to_google(file_id)
+    await drive_service.declare_upload_to_google(file_id)
     logger.info(f"Was created {file_id}")
 
     return {"file_id": file_id}
@@ -76,5 +73,5 @@ async def upload(
     Gets file_name and download bytes to drive with its name
     """
     logger.info(f"Recieved {len(file_data)} bytes")
-    await upload_to_google(file_id, file_data)
+    await drive_service.upload_to_google(file_id, file_data)
     return {"message": f"Uploaded {len(file_data)} for {file_id}"}

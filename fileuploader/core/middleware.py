@@ -1,7 +1,7 @@
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-from .connections import get_user
+from .db.psql import get_user
 
 
 async def authorization(request: Request, call_next):

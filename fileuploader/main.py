@@ -2,6 +2,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from fastapi.openapi.utils import get_openapi
 
 from core.connections import close_redis
+from core.google import drive_service, calendar_service
 
 
 def create_app():
@@ -30,6 +31,8 @@ app = create_app()
 @app.on_event("shutdown")
 async def shutdown_event():
     await close_redis()
+    await drive_service._httpsession.close()
+    await calendar_service._httpsession.close()
 
 
 def custom_openapi():
